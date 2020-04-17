@@ -1,5 +1,4 @@
 file(REMOVE_RECURSE
-  "CMakeFiles/UltraTracer.dir/Vector.cpp.o"
   "CMakeFiles/UltraTracer.dir/main.cpp.o"
   "UltraTracer"
   "UltraTracer.pdb"

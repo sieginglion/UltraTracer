@@ -78,12 +78,6 @@
 				</MakeCommands>
 			</Target>
 		</Build>
-		<Unit filename="/Users/jon/CLionProjects/UltraTracer/Vector.cpp">
-			<Option target="UltraTracer"/>
-		</Unit>
-		<Unit filename="/Users/jon/CLionProjects/UltraTracer/Vector.h">
-			<Option target="UltraTracer"/>
-		</Unit>
 		<Unit filename="/Users/jon/CLionProjects/UltraTracer/main.cpp">
 			<Option target="UltraTracer"/>
 		</Unit>

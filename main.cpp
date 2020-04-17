@@ -6,7 +6,7 @@ struct Vector {
 
     Vector();
     Vector(f32 x, f32 y, f32 z)
-        : x(x), y(y), z(z) {
+            : x(x), y(y), z(z) {
     }
 
     Vector operator+(Vector V) {
@@ -91,5 +91,5 @@ int main() {
 //            }
 //        }
     }
-    
+
 }
