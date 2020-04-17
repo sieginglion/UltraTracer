@@ -123,6 +123,33 @@ UltraTracer/fast:
 	$(MAKE) -f CMakeFiles/UltraTracer.dir/build.make CMakeFiles/UltraTracer.dir/build
 .PHONY : UltraTracer/fast
 
+Vector.o: Vector.cpp.o
+
+.PHONY : Vector.o
+
+# target to build an object file
+Vector.cpp.o:
+	$(MAKE) -f CMakeFiles/UltraTracer.dir/build.make CMakeFiles/UltraTracer.dir/Vector.cpp.o
+.PHONY : Vector.cpp.o
+
+Vector.i: Vector.cpp.i
+
+.PHONY : Vector.i
+
+# target to preprocess a source file
+Vector.cpp.i:
+	$(MAKE) -f CMakeFiles/UltraTracer.dir/build.make CMakeFiles/UltraTracer.dir/Vector.cpp.i
+.PHONY : Vector.cpp.i
+
+Vector.s: Vector.cpp.s
+
+.PHONY : Vector.s
+
+# target to generate assembly for a file
+Vector.cpp.s:
+	$(MAKE) -f CMakeFiles/UltraTracer.dir/build.make CMakeFiles/UltraTracer.dir/Vector.cpp.s
+.PHONY : Vector.cpp.s
+
 main.o: main.cpp.o
 
 .PHONY : main.o
@@ -159,6 +186,9 @@ help:
 	@echo "... rebuild_cache"
 	@echo "... edit_cache"
 	@echo "... UltraTracer"
+	@echo "... Vector.o"
+	@echo "... Vector.i"
+	@echo "... Vector.s"
 	@echo "... main.o"
 	@echo "... main.i"
 	@echo "... main.s"

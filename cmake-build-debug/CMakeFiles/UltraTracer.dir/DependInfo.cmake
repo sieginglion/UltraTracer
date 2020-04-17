@@ -4,6 +4,7 @@ set(CMAKE_DEPENDS_LANGUAGES
   )
 # The set of files for implicit dependencies of each language:
 set(CMAKE_DEPENDS_CHECK_CXX
+  "/Users/jon/CLionProjects/UltraTracer/Vector.cpp" "/Users/jon/CLionProjects/UltraTracer/cmake-build-debug/CMakeFiles/UltraTracer.dir/Vector.cpp.o"
   "/Users/jon/CLionProjects/UltraTracer/main.cpp" "/Users/jon/CLionProjects/UltraTracer/cmake-build-debug/CMakeFiles/UltraTracer.dir/main.cpp.o"
   )
 set(CMAKE_CXX_COMPILER_ID "AppleClang")
