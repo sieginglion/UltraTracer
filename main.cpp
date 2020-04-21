@@ -28,17 +28,16 @@ struct Vector {
     Vector operator-(Vector V) {
         return { x - V.x, y - V.y, z - V.z };
     }
-    float dot(Vector V) {
-        return x * V.x + y * V.y + z * V.z;
+    float dot(Vector B) {
+        return x * B.x + y * B.y + z * B.z;
     }
-    Vector crs(Vector V) {
-        return { y * V.z - z * V.y, z * V.x - x * V.z, x * V.y - y * V.x };
+    Vector crs(Vector B) {
+        return { y * B.z - z * B.y, z * B.x - x * B.z, x * B.y - y * B.x };
     }
 };
 
 struct Euclid {
     Vector O, D;
-    float I;
 };
 
 void SplitStr(string& str, string& sep, vector<string>& substrs) {
@@ -76,64 +75,54 @@ void LoadObject(string& filename, vector<array<Vector, 3>>& object) {
     }
 }
 
-void CreateRays(float FOV, int height, int width, Vector& cam_pos, Vector& cam_dir, Euclid* rays) {
-    float pixel = tan(FOV / 2) * 2 / width;
-    Vector dx = Vector{ cam_dir.y, -cam_dir.x, 0 }.norm() * pixel;
-    Vector dy = { 0, 0, -pixel };
-    cam_dir = cam_dir - dx * (width / 2) - dy * (height / 2);
-    for (int i = 0; i < height; i++) {
-        for (int j = 0; j < width; j++) {
-            rays[width * i + j] = { cam_pos, cam_dir + dx * j + dy * i };
-        }
+#define SUB(A, B) { A.x - B.x, A.y - B.y, A.z - B.z }
+#define DOT(A, B) A.x * B.x + A.y * B.y + A.z * B.z
+#define CRS(A, B) { A.y * B.z - A.z * B.y, A.z * B.x - A.x * B.z, A.x * B.y - A.y * B.x }
+
+float GetIntersect(array<Vector, 3>& V, Euclid& R) {
+    Vector E1 = SUB(V[1], V[0]);
+    Vector E2 = SUB(V[2], V[0]);
+    Vector P = CRS(R.D, E2);
+    float d = DOT(E1, P);
+    if (abs(d) < 0.000001) {
+        return 0;
     }
+    Vector T = SUB(R.O, V[0]);
+    float u = DOT(P, T);
+    if (u < 0 || u > d) {
+        return 0;
+    }
+    Vector Q = CRS(T, E1);
+    float v = DOT(R.D, Q);
+    if (v < 0 || u + v > d) {
+        return 0;
+    }
+    return DOT(E2, Q) / d;
 }
 
-float intersect(array<Vector, 3> V, Euclid R) {
-    Vector E1 = V[1] - V[0];
-    Vector E2 = V[2] - V[0];
-    Vector P = R.D.crs(E2);
-    float det = E1.dot(P);
-    if (det < 0.000001) {
-        return 0.;
+Vector GetReflect(array<Vector, 3>& V, Vector D) {
+    Vector N = (V[1] - V[0]).crs(V[2] - V[0]).norm();
+    if (D.dot(N) > 0) {
+        N = N * -1;
     }
-    Vector T = R.O - V[0];
-    float u = T.dot(P);
-    if (u < 0. || u > det) {
-        return 0.;
-    }
-    Vector Q = T.crs(E1);
-    float v = R.D.dot(Q);
-    if (v < 0. || u + v > det) {
-        return 0.;
-    }
-    return E2.dot(Q);
+    return D + N * D.dot(N) * 2;
 }
 
-Vector ReflectRay(Vector v, Vector n) {
-    if (v.dot(n) > 0) {
-        n = n * -1;
-    }
-    return v + n * v.dot(n) * 2;
-}
-
-template<int N>
-void TraceRays(array<Euclid, N>& rays, vector<array<Vector, 3>> object, int n_iters, Vector& sun) {
+float TraceRay(vector<array<Vector, 3>>& object, Euclid& ray, Vector& sun, int n_iters) {
+    int intensity = 1;
     for (int i = 0; i < n_iters; i++) {
-        for (auto& ray: rays) {
-            if (ray.x || ray.y || ray.z) {
-                for (auto& plane: object) {
-                    float t = CheckIntersect(plane, ray);
-                    if (t > 0) {
-                        Vector n = (plane[1] - plane[0]).crs(plane[2] - plane[0]).norm();
-                        ray = { ray.O + ray.D * t, ReflectRay(ray.D, n), ray.I * 0.9 };
-                    }
-                    else if (ray.D.dot(sun) == 0) {
-                        ray.D = { 0, 0, 0 };
-                    }
-                }
+        for (auto& plane: object) {
+            float t = GetIntersect(plane, ray);
+            if (not t) {
+                return intensity * max(ray.D.dot(sun), 0);
+            }
+            else {
+                ray = { ray.O + ray.D * t, GetReflect(plane, ray.D) };
+                intensity *= 0.9;
             }
         }
     }
+    return intensity * max(ray.D.dot(sun), 0);
 }
 
 int main() {
@@ -150,16 +139,19 @@ int main() {
     Euclid rays[WIDTH * HEIGHT];
 
     LoadObject(FILENAME, object);
-    CreateRays(FOV, HEIGHT, WIDTH, CAM_POS, CAM_DIR, rays);
-//
 
-//
-//    float screen[height][width];
-//    for (int i = 0; i < height; i++) {
-//        for (int j = 0; j < width; j++) {
-//            screen[i][j] = rays[i][j].I;
-//        }
-//    }
+    float screen[width * height];
+
+    float pixel = tan(FOV / 2) * 2 / width;
+    Vector dx = Vector{ cam_dir.y, -cam_dir.x, 0 }.norm() * pixel;
+    Vector dy = { 0, 0, -pixel };
+    cam_dir = cam_dir - dx * (width / 2) - dy * (height / 2);
+    for (int i = 0; i < height; i++) {
+        for (int j = 0; j < width; j++) {
+            ray = { cam_pos, cam_dir + dx * j + dy * i };
+            screen[width * i + j] = TraceRay(object, ray, sun, 10);
+        }
+    }
 //
 //    ofstream file("result.pgm");
 //    file << "P2\n";
