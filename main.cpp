@@ -4,7 +4,7 @@
 #include <fstream>
 
 #define SUB(A, B) { A.x - B.x, A.y - B.y, A.z - B.z }
-#define DOT(A, B) A.x * B.x + A.y * B.y + A.z * B.z
+#define DOT(A, B) ( A.x * B.x + A.y * B.y + A.z * B.z )
 #define CRS(A, B) { A.y * B.z - A.z * B.y, A.z * B.x - A.x * B.z, A.x * B.y - A.y * B.x }
 
 using namespace std;
@@ -58,7 +58,7 @@ vector<array<Vector, 3>> LoadObject(string& filename) {
     string sep = " ";
     vector<Vector> vertices;
     vector<array<Vector, 3>> object;
-    ifstream file("../" + filename);
+    ifstream file(filename);
     for (string line; getline(file, line);) {
         if (line[0] == 'v') {
             Vector vertex;
@@ -77,6 +77,12 @@ vector<array<Vector, 3>> LoadObject(string& filename) {
             object.push_back(plane);
         }
     }
+    array<Vector, 3> ground = { Vector{ 100, 0, 0 }, Vector{ -100, -100, 0 }, Vector{ -100, 100, 0 } };
+    array<Vector, 3> tetra0 = { Vector{ -4, 2.5, 0 }, Vector{ -1.5, -1.83, 0 }, Vector{ -4, -0.39, 7 } };
+    array<Vector, 3> tetra1 = { Vector{ -4, 2.5, 0 }, Vector{ -6.5, -1.83, 0 }, Vector{ -4, -0.39, 7 } };
+    object.push_back(ground);
+    object.push_back(tetra0);
+    object.push_back(tetra1);
     return object;
 }
 
@@ -85,21 +91,48 @@ float GetIntersect(array<Vector, 3>& V, Ray& R) {
     Vector E2 = SUB(V[2], V[0]);
     Vector P = CRS(R.D, E2);
     float d = DOT(E1, P);
-    if (d > -0.000001 and d < 0.000001) {
+    if (d > -0.000001 && d < 0.000001) {
         return 0;
     }
     Vector T = SUB(R.O, V[0]);
-    float u = DOT(P, T);
-    if (u < 0 or u > d) {
+    float u = DOT(P, T) / d;
+    if (u < 0 || u > 1) {
         return 0;
     }
     Vector Q = CRS(T, E1);
-    float v = DOT(R.D, Q);
-    if (v < 0 or u + v > d) {
+    float v = DOT(R.D, Q) / d;
+    if (v < 0 || u + v > 1) {
         return 0;
     }
     return DOT(E2, Q) / d;
 }
+
+//float GetIntersect(array<Vector, 3>& V, Ray& R) {
+//    Vector E1 = SUB(V[1], V[0]);
+//    Vector E2 = SUB(V[2], V[0]);
+//    Vector P = CRS(R.D, E2);
+//    float d = DOT(E1, P);
+//    if (d < 0.000001) {
+//        return 0;
+//    }
+//    Vector T = SUB(R.O, V[0]);
+//    float u = DOT(P, T);
+//    if (u < 0 || u > d) {
+//        return 0;
+//    }
+//    Vector Q = CRS(T, E1);
+//    float v = DOT(R.D, Q);
+//    if (v < 0 || u + v > d) {
+//        return 0;
+//    }
+//    return DOT(E2, Q) / d;
+//}
+
+//int main() {
+//    array<Vector, 3> plane = { Vector{ 100, 0, 0 }, Vector{ -100, -100, 0 }, Vector{ -100, 100, 0 } };
+//    Ray ray = { { 0, 0, 10 }, { 0, 0, -1 } };
+//    float t = GetIntersect(plane, ray);
+//}
 
 Vector GetReflect(array<Vector, 3>& V, Vector D) {
     Vector N = (V[1] - V[0]).crs(V[2] - V[0]).norm();
@@ -107,24 +140,33 @@ Vector GetReflect(array<Vector, 3>& V, Vector D) {
     if (p > 0) {
         N = N * -1;
     }
+    else {
+        p = -p;
+    }
     return D + N * p * 2;
 }
 
 float TraceRay(int n_iters, vector<array<Vector, 3>>& object, Ray& ray, Vector& sun) {
     float intensity = 1;
     for (int i = 0; i < n_iters; i++) {
+        float T = 1000000;
+        array<Vector, 3> Plane;
         for (auto& plane: object) {
             float t = GetIntersect(plane, ray);
-            if (t) {
-                ray = { ray.O + ray.D * t, GetReflect(plane, ray.D) };
-                intensity *= 0.9;
-            }
-            else {
-                return intensity * max(ray.D.dot(sun), 0.f);
+            if (t > 0 and t < T) {
+                T = t;
+                Plane = plane;
             }
         }
+        if (T < 1000000) {
+            ray = { ray.O + ray.D * T, GetReflect(Plane, ray.D) };
+            intensity *= 0.75;
+        }
+        else {
+            return intensity * max(ray.D.dot(sun), 0.0f);
+        }
     }
-    return intensity * max(ray.D.dot(sun), 0.f);
+    return intensity * max(ray.D.dot(sun), 0.0f);
 }
 
 void SaveScreen(int width, int height, float screen[]) {
@@ -135,10 +177,10 @@ void SaveScreen(int width, int height, float screen[]) {
     for (int i = 0; i < height; i++) {
         for (int j = 0; j < width; j++) {
             if (j == width - 1) {
-                file << int(screen[width * i + j] * 255) << '\n';
+                file << int(round(screen[width * i + j] * 255.0f)) << '\n';
             }
             else {
-                file << int(screen[width * i + j] * 255) << ' ';
+                file << int(round(screen[width * i + j] * 255.0f)) << ' ';
             }
         }
     }
@@ -149,12 +191,13 @@ int main() {
     float FOV = 60 * 0.0174;
     int WIDTH = 640;
     int HEIGHT = 480;
-    Vector CAM_POS = { 8, 0, 1.5 };
-    Vector CAM_DIR = { -1, 0, 0 };
+    Vector CAM_POS = { -1, 10, 1.5 };
+    Vector CAM_DIR = { 0, -1, 0 };
     int N_ITERS = 10;
     Vector SUN = { 0, 0, 1 };
 
     vector<array<Vector, 3>> object = LoadObject(FILENAME);
+
     float screen[WIDTH * HEIGHT];
 
     float pixel = tan(FOV / 2) * 2 / WIDTH;
@@ -164,7 +207,7 @@ int main() {
 
     for (int i = 0; i < HEIGHT; i++) {
         for (int j = 0; j < WIDTH; j++) {
-            Ray ray = { CAM_POS, CAM_DIR + dy * i + dx * j };
+            Ray ray = { CAM_POS, (CAM_DIR + dy * i + dx * j).norm() };
             screen[WIDTH * i + j] = TraceRay(N_ITERS, object, ray, SUN);
         }
     }
