@@ -54,38 +54,35 @@ vector<string> SplitStr(string& str, string& sep) {
     return substrs;
 }
 
-vector<array<Vector, 3>> LoadObject(string& filename) {
+vector<array<Vector, 3>> LoadScene(vector<string>& filenames) {
     string sep = " ";
-    vector<Vector> vertices;
-    vector<array<Vector, 3>> object;
-    ifstream file(filename);
-    for (string line; getline(file, line);) {
-        if (line[0] == 'v') {
-            Vector vertex;
-            vector<string> substrs = SplitStr(line, sep);
-            for (int i = 0; i < 3; i++) {
-                vertex[i] = stof(substrs[i + 1]);
+    vector<array<Vector, 3>> scene;
+    for (auto& filename: filenames) {
+        vector<Vector> vertices;
+        ifstream file(filename);
+        for (string line; getline(file, line);) {
+            if (line[0] == 'v') {
+                Vector vertex;
+                vector<string> substrs = SplitStr(line, sep);
+                for (int i = 0; i < 3; i++) {
+                    vertex[i] = stof(substrs[i + 1]);
+                }
+                vertices.push_back(vertex);
             }
-            vertices.push_back(vertex);
-        }
-        else if (line[0] == 'f') {
-            array<Vector, 3> plane;
-            vector<string> substrs = SplitStr(line, sep);
-            for (int i = 0; i < 3; i++) {
-                plane[i] = vertices[stoi(substrs[i + 1]) - 1];
+            else if (line[0] == 'f') {
+                array<Vector, 3> plane;
+                vector<string> substrs = SplitStr(line, sep);
+                for (int i = 0; i < 3; i++) {
+                    plane[i] = vertices[stoi(substrs[i + 1]) - 1];
+                }
+                scene.push_back(plane);
             }
-            object.push_back(plane);
         }
     }
-    array<Vector, 3> ground = { Vector{ 100, 0, 0 }, Vector{ -100, -100, 0 }, Vector{ -100, 100, 0 } };
-    array<Vector, 3> tetra0 = { Vector{ -4, 2.5, 0 }, Vector{ -1.5, -1.83, 0 }, Vector{ -4, -0.39, 7 } };
-    array<Vector, 3> tetra1 = { Vector{ -4, 2.5, 0 }, Vector{ -6.5, -1.83, 0 }, Vector{ -4, -0.39, 7 } };
-    object.push_back(ground);
-    object.push_back(tetra0);
-    object.push_back(tetra1);
-    return object;
+    return scene;
 }
 
+// Möller–Trumbore intersection algorithm
 float GetIntersect(array<Vector, 3>& V, Ray& R) {
     Vector E1 = SUB(V[1], V[0]);
     Vector E2 = SUB(V[2], V[0]);
@@ -104,63 +101,31 @@ float GetIntersect(array<Vector, 3>& V, Ray& R) {
     if (v < 0 || u + v > 1) {
         return 0;
     }
-    return DOT(E2, Q) / d;
+    return DOT(E2, Q) / d - 0.001; // avoid overshooting
 }
 
-//float GetIntersect(array<Vector, 3>& V, Ray& R) {
-//    Vector E1 = SUB(V[1], V[0]);
-//    Vector E2 = SUB(V[2], V[0]);
-//    Vector P = CRS(R.D, E2);
-//    float d = DOT(E1, P);
-//    if (d < 0.000001) {
-//        return 0;
-//    }
-//    Vector T = SUB(R.O, V[0]);
-//    float u = DOT(P, T);
-//    if (u < 0 || u > d) {
-//        return 0;
-//    }
-//    Vector Q = CRS(T, E1);
-//    float v = DOT(R.D, Q);
-//    if (v < 0 || u + v > d) {
-//        return 0;
-//    }
-//    return DOT(E2, Q) / d;
-//}
-
-//int main() {
-//    array<Vector, 3> plane = { Vector{ 100, 0, 0 }, Vector{ -100, -100, 0 }, Vector{ -100, 100, 0 } };
-//    Ray ray = { { 0, 0, 10 }, { 0, 0, -1 } };
-//    float t = GetIntersect(plane, ray);
-//}
-
-Vector GetReflect(array<Vector, 3>& V, Vector D) {
+Vector GetReflect(array<Vector, 3>& V, Vector& D) {
     Vector N = (V[1] - V[0]).crs(V[2] - V[0]).norm();
     float p = D.dot(N);
-    if (p > 0) {
-        N = N * -1;
-    }
-    else {
-        p = -p;
-    }
+    if (p > 0) N = N * -1; else p = -p;
     return D + N * p * 2;
 }
 
-float TraceRay(int n_iters, vector<array<Vector, 3>>& object, Ray& ray, Vector& sun) {
+float TraceRay(int max_iters, vector<array<Vector, 3>>& scene, Ray& ray, float reflectance, Vector& sun) {
     float intensity = 1;
-    for (int i = 0; i < n_iters; i++) {
-        float T = 1000000;
-        array<Vector, 3> Plane;
-        for (auto& plane: object) {
+    for (int i = 0; i < max_iters; i++) {
+        float min_t = 1000000;
+        array<Vector, 3>* plane_ptr;
+        for (auto& plane: scene) {
             float t = GetIntersect(plane, ray);
-            if (t > 0 and t < T) {
-                T = t;
-                Plane = plane;
+            if (t > 0 and t < min_t) {
+                min_t = t;
+                plane_ptr = &plane;
             }
         }
-        if (T < 1000000) {
-            ray = { ray.O + ray.D * T, GetReflect(Plane, ray.D) };
-            intensity *= 0.75;
+        if (min_t < 1000000) {
+            ray = { ray.O + ray.D * min_t, GetReflect(*plane_ptr, ray.D) };
+            intensity *= reflectance;
         }
         else {
             return intensity * max(ray.D.dot(sun), 0.0f);
@@ -177,40 +142,37 @@ void SaveScreen(int width, int height, float screen[]) {
     for (int i = 0; i < height; i++) {
         for (int j = 0; j < width; j++) {
             if (j == width - 1) {
-                file << int(round(screen[width * i + j] * 255.0f)) << '\n';
+                file << int(screen[width * i + j] * 255) << '\n';
             }
             else {
-                file << int(round(screen[width * i + j] * 255.0f)) << ' ';
+                file << int(screen[width * i + j] * 255) << ' ';
             }
         }
     }
 }
 
 int main() {
-    string FILENAME = "teapot.obj";
-    float FOV = 60 * 0.0174;
-    int WIDTH = 640;
-    int HEIGHT = 480;
-    Vector CAM_POS = { -1, 10, 1.5 };
+    vector<string> FILENAMES = { "ground.obj", "teapot.obj", "tetrahedron.obj" };
+    float FOV = 60 * 0.0174; // field of view
+    int WIDTH = 1280;
+    int HEIGHT = 720;
+    Vector CAM_POS = { -1.5, 10, 1.5 };
     Vector CAM_DIR = { 0, -1, 0 };
-    int N_ITERS = 10;
-    Vector SUN = { 0, 0, 1 };
+    int MAX_ITERS = 4; // max number of iterations of tracer
+    float REFLECTANCE = 0.75;
+    Vector SUN = { 0, 0, 1 }; // vector pointing the sun
 
-    vector<array<Vector, 3>> object = LoadObject(FILENAME);
-
-    float screen[WIDTH * HEIGHT];
-
+    vector<array<Vector, 3>> scene = LoadScene(FILENAMES);
     float pixel = tan(FOV / 2) * 2 / WIDTH;
     Vector dx = Vector{ CAM_DIR.y, -CAM_DIR.x, 0 }.norm() * pixel;
     Vector dy = { 0, 0, -pixel };
     CAM_DIR = CAM_DIR - dx * (WIDTH / 2) - dy * (HEIGHT / 2);
-
+    float screen[WIDTH * HEIGHT];
     for (int i = 0; i < HEIGHT; i++) {
         for (int j = 0; j < WIDTH; j++) {
             Ray ray = { CAM_POS, (CAM_DIR + dy * i + dx * j).norm() };
-            screen[WIDTH * i + j] = TraceRay(N_ITERS, object, ray, SUN);
+            screen[WIDTH * i + j] = TraceRay(MAX_ITERS, scene, ray, REFLECTANCE, SUN);
         }
     }
-
     SaveScreen(WIDTH, HEIGHT, screen);
 }
