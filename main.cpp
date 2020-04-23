@@ -101,7 +101,7 @@ float GetIntersect(array<Vector, 3>& V, Ray& R) {
     if (v < 0 || u + v > 1) {
         return 0;
     }
-    return DOT(E2, Q) / d - 0.001; // avoid overshooting
+    return DOT(E2, Q) / d - 0.001; // minus 0.001 to avoid overshooting
 }
 
 Vector GetReflect(array<Vector, 3>& V, Vector& D) {
@@ -116,7 +116,7 @@ float TraceRay(int max_iters, vector<array<Vector, 3>>& scene, Ray& ray, float r
     for (int i = 0; i < max_iters; i++) {
         float min_t = 1000000;
         array<Vector, 3>* plane_ptr;
-        for (auto& plane: scene) {
+        for (auto& plane: scene) { // find plane which intersect with the ray first (closest)
             float t = GetIntersect(plane, ray);
             if (t > 0 and t < min_t) {
                 min_t = t;
@@ -156,11 +156,11 @@ int main() {
     float FOV = 60 * 0.0174; // field of view
     int WIDTH = 1280;
     int HEIGHT = 720;
-    Vector CAM_POS = { -1.5, 10, 1.5 };
-    Vector CAM_DIR = { 0, -1, 0 };
-    int MAX_ITERS = 4; // max number of iterations of tracer
+    Vector CAM_POS = { -1.5, 10, 1.5 }; // camera position
+    Vector CAM_DIR = { 0, -1, 0 }; // camera direction
+    int MAX_ITERS = 4; // max iterations of tracer
     float REFLECTANCE = 0.75;
-    Vector SUN = { 0, 0, 1 }; // vector pointing the sun
+    Vector SUN = { 0, 0.18, 1 }; // vector pointing the sun
 
     vector<array<Vector, 3>> scene = LoadScene(FILENAMES);
     float pixel = tan(FOV / 2) * 2 / WIDTH;
