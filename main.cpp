@@ -2,45 +2,34 @@
 #include <array>
 #include <vector>
 #include <fstream>
-
-#define SUB(A, B) { A.x - B.x, A.y - B.y, A.z - B.z }
-#define DOT(A, B) ( A.x * B.x + A.y * B.y + A.z * B.z )
-#define CRS(A, B) { A.y * B.z - A.z * B.y, A.z * B.x - A.x * B.z, A.x * B.y - A.y * B.x }
+#include <iostream>
+#include <xmmintrin.h>
+#include <pmmintrin.h>
 
 using namespace std;
 
-struct Vector {
-    float x, y, z;
-    float& operator[](int i) {
-        switch (i) {
-            case 0: return x;
-            case 1: return y;
-            case 2: return z;
-        }
-    }
-    Vector norm() {
-        float l = sqrt(x * x + y * y + z * z);
-        return { x / l, y / l, z / l };
-    }
-    Vector operator*(float a) {
-        return { x * a, y * a, z * a };
-    }
-    Vector operator+(Vector B) {
-        return { x + B.x, y + B.y, z + B.z };
-    }
-    Vector operator-(Vector B) {
-        return { x - B.x, y - B.y, z - B.z };
-    }
-    float dot(Vector B) {
-        return x * B.x + y * B.y + z * B.z;
-    }
-    Vector crs(Vector B) {
-        return { y * B.z - z * B.y, z * B.x - x * B.z, x * B.y - y * B.x };
-    }
-};
+__m128 Norm(__m128 a) {
+    __m128 _ = a * a;
+    _ = _mm_hadd_ps(_, _);
+    return a / sqrt(_mm_hadd_ps(_, _)[0]);
+}
+
+float Dot(__m128& a, __m128& b) {
+    __m128 _ = a * b;
+    _ = _mm_hadd_ps(_, _);
+    return _mm_hadd_ps(_, _)[0];
+}
+
+__m128 Cross(__m128& a, __m128& b) {
+    __m128 _ = _mm_sub_ps(
+            _mm_mul_ps(a, _mm_shuffle_ps(b, b, _MM_SHUFFLE(3, 0, 2, 1))),
+            _mm_mul_ps(_mm_shuffle_ps(a, a, _MM_SHUFFLE(3, 0, 2, 1)), b)
+    );
+    return _mm_shuffle_ps(_, _, _MM_SHUFFLE(3, 0, 2, 1));
+}
 
 struct Ray {
-    Vector O, D;
+    __m128 O, D;
 };
 
 vector<string> SplitStr(string& str, string& sep) {
@@ -54,28 +43,24 @@ vector<string> SplitStr(string& str, string& sep) {
     return substrs;
 }
 
-vector<array<Vector, 3>> LoadScene(vector<string>& filenames) {
+vector<array<__m128, 3>> LoadScene(vector<string>& filenames) {
     string sep = " ";
-    vector<array<Vector, 3>> scene;
+    vector<array<__m128, 3>> scene;
     for (auto& filename: filenames) {
-        vector<Vector> vertices;
+        vector<__m128> vertices;
         ifstream file(filename);
         for (string line; getline(file, line);) {
             if (line[0] == 'v') {
-                Vector vertex;
                 vector<string> substrs = SplitStr(line, sep);
-                for (int i = 0; i < 3; i++) {
-                    vertex[i] = stof(substrs[i + 1]);
-                }
-                vertices.push_back(vertex);
+                vertices.push_back(__m128{ stof(substrs[1]), stof(substrs[2]), stof(substrs[3]), 0 });
             }
             else if (line[0] == 'f') {
-                array<Vector, 3> plane;
                 vector<string> substrs = SplitStr(line, sep);
-                for (int i = 0; i < 3; i++) {
-                    plane[i] = vertices[stoi(substrs[i + 1]) - 1];
-                }
-                scene.push_back(plane);
+                scene.push_back({
+                    vertices[stoi(substrs[1]) - 1],
+                    vertices[stoi(substrs[2]) - 1],
+                    vertices[stoi(substrs[3]) - 1]
+                });
             }
         }
     }
@@ -83,55 +68,55 @@ vector<array<Vector, 3>> LoadScene(vector<string>& filenames) {
 }
 
 // Möller–Trumbore intersection algorithm
-float GetIntersect(array<Vector, 3>& V, Ray& R) {
-    Vector E1 = SUB(V[1], V[0]);
-    Vector E2 = SUB(V[2], V[0]);
-    Vector P = CRS(R.D, E2);
-    float d = DOT(E1, P);
+float GetIntersect(array<__m128, 3>& V, Ray& R) {
+    __m128 E1 = V[1] - V[0];
+    __m128 E2 = V[2] - V[0];
+    __m128 P = Cross(R.D, E2);
+    float d = Dot(E1, P);
     if (d > -0.000001 && d < 0.000001) {
         return 0;
     }
-    Vector T = SUB(R.O, V[0]);
-    float u = DOT(P, T) / d;
+    __m128 T = R.O - V[0];
+    float u = Dot(P, T) / d;
     if (u < 0 || u > 1) {
         return 0;
     }
-    Vector Q = CRS(T, E1);
-    float v = DOT(R.D, Q) / d;
+    __m128 Q = Cross(T, E1);
+    float v = Dot(R.D, Q) / d;
     if (v < 0 || u + v > 1) {
         return 0;
     }
-    return DOT(E2, Q) / d - 0.001; // minus 0.001 to avoid overshooting
+    return Dot(E2, Q) / d;
 }
 
-Vector GetReflect(array<Vector, 3>& V, Vector& D) {
-    Vector N = (V[1] - V[0]).crs(V[2] - V[0]).norm();
-    float p = D.dot(N);
-    if (p > 0) N = N * -1; else p = -p;
-    return D + N * p * 2;
+__m128 GetReflect(array<__m128, 3>& V, __m128& D) {
+    __m128 E1 = V[1] - V[0];
+    __m128 E2 = V[2] - V[0];
+    __m128 N = Norm(Cross(E1, E2));
+    return D - N * Dot(D, N) * 2;
 }
 
-float TraceRay(int max_iters, vector<array<Vector, 3>>& scene, Ray& ray, float reflectance, Vector& sun) {
-    float intensity = 1;
+float TraceRay(int max_iters, vector<array<__m128, 3>>& scene, Ray& ray, float reflectance, __m128& sun) {
+    float intensity = 1.0f;
     for (int i = 0; i < max_iters; i++) {
-        float min_t = 1000000;
-        array<Vector, 3>* plane_ptr;
+        float min_t = 1000000.0f;
+        array<__m128, 3>* plane_ptr;
         for (auto& plane: scene) { // find plane which intersect with the ray first (closest)
-            float t = GetIntersect(plane, ray);
-            if (t > 0 and t < min_t) {
+            float t = GetIntersect(plane, ray) - 0.001f; // minus 0.001 to avoid overshooting
+            if (t > 0.0f and t < min_t) {
                 min_t = t;
                 plane_ptr = &plane;
             }
         }
-        if (min_t < 1000000) {
+        if (min_t < 1000000.0f) {
             ray = { ray.O + ray.D * min_t, GetReflect(*plane_ptr, ray.D) };
             intensity *= reflectance;
         }
         else {
-            return intensity * max(ray.D.dot(sun), 0.0f);
+            break;
         }
     }
-    return intensity * max(ray.D.dot(sun), 0.0f);
+    return intensity * max(Dot(ray.D, sun), 0.0f);
 }
 
 void SaveScreen(int width, int height, float screen[]) {
@@ -151,26 +136,38 @@ void SaveScreen(int width, int height, float screen[]) {
     }
 }
 
+struct Timer {
+    std::chrono::time_point<std::chrono::steady_clock> T0, T1;
+    Timer() {
+        T0 = std::chrono::steady_clock::now();
+    }
+    ~Timer() {
+        T1 = std::chrono::steady_clock::now();
+        std::cout << (T1 - T0).count() / 1000000 << "ms\n";
+    }
+};
+
 int main() {
     vector<string> FILENAMES = { "ground.obj", "teapot.obj", "tetrahedron.obj" };
     float FOV = 60 * 0.0174; // field of view
-    int WIDTH = 1280;
-    int HEIGHT = 720;
-    Vector CAM_POS = { -1.5, 10, 1.5 }; // camera position
-    Vector CAM_DIR = { 0, -1, 0 }; // camera direction
+    int WIDTH = 640;
+    int HEIGHT = 360;
+    __m128 CAM_POS = { -1.5, 10, 1.5 }; // camera position
+    __m128 CAM_DIR = { 0, -1, 0 }; // camera direction
     int MAX_ITERS = 4; // max iterations of tracer
     float REFLECTANCE = 0.75;
-    Vector SUN = { 0, 0.18, 1 }; // vector pointing the sun
+    __m128 SUN = { 0, 0.18, 1 }; // vector pointing the sun
 
-    vector<array<Vector, 3>> scene = LoadScene(FILENAMES);
+    vector<array<__m128, 3>> scene = LoadScene(FILENAMES);
     float pixel = tan(FOV / 2) * 2 / WIDTH;
-    Vector dx = Vector{ CAM_DIR.y, -CAM_DIR.x, 0 }.norm() * pixel;
-    Vector dy = { 0, 0, -pixel };
-    CAM_DIR = CAM_DIR - dx * (WIDTH / 2) - dy * (HEIGHT / 2);
+    __m128 dx = Norm(__m128{ CAM_DIR[1], -CAM_DIR[0], 0 }) * pixel;
+    __m128 dy = { 0, 0, -pixel };
+    CAM_DIR = CAM_DIR - dx * (float(WIDTH) / 2) - dy * (float(HEIGHT) / 2);
     float screen[WIDTH * HEIGHT];
+    Timer timer;
     for (int i = 0; i < HEIGHT; i++) {
         for (int j = 0; j < WIDTH; j++) {
-            Ray ray = { CAM_POS, (CAM_DIR + dy * i + dx * j).norm() };
+            Ray ray = { CAM_POS, Norm(CAM_DIR + dy * float(i) + dx * float(j)) };
             screen[WIDTH * i + j] = TraceRay(MAX_ITERS, scene, ray, REFLECTANCE, SUN);
         }
     }
