@@ -101,9 +101,9 @@ float TraceRay(int max_iters, vector<array<__m128, 3>>& scene, Ray& ray, float r
     for (int i = 0; i < max_iters; i++) {
         float min_t = 1000000.0f;
         array<__m128, 3>* plane_ptr;
-        for (auto& plane: scene) { // find plane which intersect with the ray first (closest)
+        for (auto& plane: scene) { // find plane which intersect and is closest to the ray
             float t = GetIntersect(plane, ray) - 0.001f; // minus 0.001 to avoid overshooting
-            if (t > 0.0f and t < min_t) {
+            if (t > 0.0f && t < min_t) {
                 min_t = t;
                 plane_ptr = &plane;
             }
@@ -148,16 +148,15 @@ struct Timer {
 };
 
 int main() {
-//    vector<string> FILENAMES = { "../ground.obj", "../teapot.obj", "../tetrahedron.obj" };
-    vector<string> FILENAMES = { "ground.obj", "teapot.obj", "tetrahedron.obj" };
+    vector<string> FILENAMES = { "container.obj", "teapot.obj", "tetrahedron.obj" };
     float FOV = 60 * 0.0174; // field of view
-    int WIDTH = 640;
-    int HEIGHT = 360;
+    int WIDTH = 960;
+    int HEIGHT = 540;
     __m128 CAM_POS = { -1.5, 10, 1.5 }; // camera position
     __m128 CAM_DIR = { 0, -1, 0 }; // camera direction
-    int MAX_ITERS = 4; // max iterations of tracer
+    int MAX_ITERS = 16; // max iterations of tracer
     float REFLECTANCE = 0.75;
-    __m128 SUN = { 0, 0.18, 1 }; // vector pointing the sun
+    __m128 SUN = Norm(__m128{ 1, 1, 1 }); // vector pointing the sun
 
     vector<array<__m128, 3>> scene = LoadScene(FILENAMES);
     float pixel = tan(FOV / 2) * 2 / WIDTH;
